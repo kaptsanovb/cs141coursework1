@@ -143,7 +143,7 @@ drawScreen TUIState {..} =
               GameOver BagEmpty -> txt "The bag is empty."
               _ -> emptyWidget,
             hCenter $ str $ "Final score: " ++ show (totalScore gameState),
-            hCenter $ txt "Press 'Esc' to quit or 'R' to restart."
+            hCenter $ txt "Press 'Esc' to quit or 'Ctrl+R' to restart."
           ]
 
     renderBag :: Widget Name
