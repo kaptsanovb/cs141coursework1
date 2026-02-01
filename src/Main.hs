@@ -38,6 +38,9 @@ applyPair (f,g) (a,b) = (f a, g b)
 freqmap :: Ord k => [k] -> Map k Integer
 freqmap ls = foldl (\m l -> Data.Map.insert l ((coalesceMaybe (m !? l) 0) + 1) m) (fromList [] :: (Ord k => Map k Integer)) ls
 
+freqsubset :: Ord k => Map k Integer -> Map k Integer -> Bool
+freqsubset a b = and $ map (\(key,freq) -> (coalesceMaybe (a !? key) 0) >= freq) $ toList b
+
 -- Ex. 1:
 -- Read the spec to find out what goes here.
 -- TODO: maybe add types
@@ -115,7 +118,7 @@ allWordsLetterCounts :: [(Map Char Integer, String)]
 allWordsLetterCounts = map (\w -> (freqmap w, w)) allWords
 
 possibleWords :: [Char] -> [String]
-possibleWords ls = map snd $ filter ((freqmap ls, ls) <) $ allWordsLetterCounts
+possibleWords ls = map snd $ filter (freqsubset (freqmap ls) . fst) $ allWordsLetterCounts
 
 -- Ex. 7:
 -- Given a set of letters, find the highest scoring word that can be formed from them.
@@ -166,7 +169,7 @@ instance Show Move where
     show (PlayWord w)  = w
 
 
-alp = "qwertyuiopasdfghjklzxcvbnm"
+alp = "qwertyuiopasdfghjklzxcvbnmkhdkjfhjiarheigflhuerighzfkjghdklfhuihmnbmnbnbzbx.bciQJHSDFKJSHdlfksdf''sdlkf"
 main :: IO()
 main = defaultMain
     [ bgroup "test"

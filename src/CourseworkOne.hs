@@ -7,8 +7,6 @@ import Data.Map (Map, fromList, toList, member, (!?), insert)
 import Data.Ratio
 import Backwords.WordList
 
-import Test.Tasty.Bench
-
 --------------------------------------------------------------------------------
 -- This file is your complete submission for the first coursework of CS141.
 --
@@ -22,7 +20,7 @@ import Test.Tasty.Bench
 -- TODO: funcoiton oi daddded
 filtermap :: (a -> Bool) -> (a -> b) -> [a] -> [b]
 filtermap _ _ []        = []
-filtermap f m (x : xs)  = if f x then m x : (filtermap f m xs) else filtermap f m xs
+filtermap f m xs  = [m x | x <- xs, f x]
 
 headIfExists :: [a] -> Maybe a
 headIfExists []   = Nothing
@@ -35,6 +33,11 @@ coalesceMaybe (Just val) _   = val
 applyPair :: ((a -> x),(b -> y)) -> (a,b) -> (x,y)
 applyPair (f,g) (a,b) = (f a, g b)
 
+freqmap :: Ord k => [k] -> Map k Integer
+freqmap ls = foldl (\m l -> Data.Map.insert l ((coalesceMaybe (m !? l) 0) + 1) m) (fromList [] :: (Ord k => Map k Integer)) ls
+
+freqsubset :: Ord k => Map k Integer -> Map k Integer -> Bool
+freqsubset a b = and $ map (\(key,freq) -> (coalesceMaybe (a !? key) 0) >= freq) $ toList b
 
 -- Ex. 1:
 -- Read the spec to find out what goes here.
@@ -59,7 +62,12 @@ instance Display [Char] where
 -- Ex. 3:
 -- Determine if a word is valid.
 isValidWord :: String -> Bool
-isValidWord w = elem (map toLower w) allWords
+isValidWord w
+    | firstL == 'i' = (elem ('i' : tail lowerW) allWords) || (elem ('I' : tail lowerW) allWords)
+    | otherwise          = elem lowerW allWords
+        where
+            firstL = toLower $ head w
+            lowerW = map toLower w
 
 -- Ex. 4:
 -- Determine the points value of a letter.
@@ -109,16 +117,11 @@ scoreWord (l : ls) = letterValue l + 2 * scoreWord ls
 
 -- Ex. 6:
 -- Get all words that can be formed from the given letters.
+allWordsLetterCounts :: [(Map Char Integer, String)]
+allWordsLetterCounts = map (\w -> (freqmap w, w)) allWords
+
 possibleWords :: [Char] -> [String]
-possibleWords ls = possibleWords' ls $ filter ((<= length ls) . length) allWords
-    where
-        possibleWords' :: [Char] -> [String] -> [String]
-        possibleWords' _  []       = []
-        possibleWords' [] possible = filter ("" ==) possible
-        possibleWords' ls possible = filter ("" ==) possible ++ concat [ map (l :) $ possibleWords' (newLs l) $ newPossible l | l <- nub ls ]
-            where
-                newLs l = delete l ls
-                newPossible l = map tail $ filter ((==) (Just l) . headIfExists) possible
+possibleWords ls = map snd $ filter (freqsubset (freqmap ls) . fst) $ allWordsLetterCounts
 
 -- Ex. 7:
 -- Given a set of letters, find the highest scoring word that can be formed from them.
@@ -144,7 +147,7 @@ bagDistribution :: [Char] -> [(Char, Rational)]
 bagDistribution ls
     = map (applyPair (id,(% (toInteger $ length ls))))
         $ toList
-        $ foldl (\m l -> Data.Map.insert l ((coalesceMaybe (m !? l) 0) + 1) m) (fromList []) ls
+        $ freqmap ls
     where len = toInteger (length ls)
 
 -- Ex. 9:
@@ -167,15 +170,3 @@ instance Show Move where
     show TakeConsonant = "c"
     show TakeVowel     = "v"
     show (PlayWord w)  = w
-
-
-alp = "qwertyuiopasdfghjklzxcvbnm"
-main :: IO()
-main = defaultMain
-    [ bgroup "test"
-        [ bench "bestWord"      $ nf bestWord alp
-        , bench "possibleWords" $ nf possibleWords alp
-        , bench "filter"        $ nf (filter ((<= (length alp)) . length)) allWords
-        ]
-    ]
-
