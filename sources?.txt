@@ -1,0 +1,1 @@
+https://stackoverflow.com/questions/46364784/haskell-checking-the-vowels-in-a-string

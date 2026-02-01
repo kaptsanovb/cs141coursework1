@@ -31,6 +31,8 @@ library
       LambdaCase
   build-depends:
       base >=4.7 && <5
+    , containers
+    , tasty-bench
     , file-embed
     , random
   default-language: GHC2021
@@ -89,3 +91,12 @@ test-suite backwords-test
     , tasty-hunit
     , tasty-quickcheck
   default-language: GHC2021
+
+benchmark test
+  main-is:       src/Main.hs
+  type:          exitcode-stdio-1.0
+  default-extensions: FlexibleInstances
+  build-depends: base, tasty-bench, backwords, containers
+  ghc-options:   "-with-rtsopts=-A32m"
+  if impl(ghc >= 8.6)
+    ghc-options: -fproc-alignment=64
