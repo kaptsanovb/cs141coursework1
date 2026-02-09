@@ -3,10 +3,13 @@ module Main where
 import Backwords.Types
 import Data.List
 import Data.Char
-import Data.Map (Map, fromList, toList, member, (!?), insert)
+import Data.Map (Map, fromList, toList, member, (!?), (!), insert)
+import qualified Data.Map
 import Data.Ratio
 import Backwords.WordList
+import Backwords.BasicGame
 
+import Debug.Trace
 import Test.Tasty.Bench
 
 --------------------------------------------------------------------------------
@@ -41,25 +44,16 @@ freqmap ls = foldl (\m l -> Data.Map.insert l ((coalesceMaybe (m !? l) 0) + 1) m
 freqsubset :: Ord k => Map k Integer -> Map k Integer -> Bool
 freqsubset a b = and $ map (\(key,freq) -> (coalesceMaybe (a !? key) 0) >= freq) $ toList b
 
--- Ex. 1:
--- Read the spec to find out what goes here.
--- TODO: maybe add types
-instance Display Char where
-    -- Backslash characters used to prevent a comment from forming TODO: exaplin better
-    display ch = "+---+\n| " ++ [toUpper ch] ++ " |\n+---+"
 
--- Ex. 2:
--- Read the spec to find out what goes here.
-instance Display [Char] where
-    -- TODO: rename
-    display []  = ""
-    display str = intercalate "\n" [bound, intercalate " " $ letterRow str, bound]
-        where
-            bound = intercalate " " $ replicate (length str) "+---+"
+freqsubtract :: Ord k => k -> Integer -> Map k Integer -> Map k Integer
+freqsubtract key n m
+    = case m !? key of
+        Nothing -> m
+        Just c  -> if (c <= n) then Data.Map.delete key m else Data.Map.insert key (c - n) m
 
-            letterRow :: [Char] -> [[Char]]
-            letterRow []         = []
-            letterRow (ch:chs)  = ("| " ++ [toUpper ch] ++ " |") : letterRow chs
+
+dup :: a -> (a,a)
+dup x = (x,x)
 
 -- Ex. 3:
 -- Determine if a word is valid.
@@ -120,6 +114,28 @@ allWordsLetterCounts = map (\w -> (freqmap w, w)) allWords
 possibleWords :: [Char] -> [String]
 possibleWords ls = map snd $ filter (freqsubset (freqmap ls) . fst) $ allWordsLetterCounts
 
+allWordsLetterCounts2 :: [(Map Char Integer, (String, Int))]
+allWordsLetterCounts2 = map (\w -> (freqmap w, (w, length w))) allWords
+
+possibleWords2 :: [Char] -> [String]
+possibleWords2 ls = map (fst . snd) $ filter (\(m,(_,l)) -> (l <= length ls) && freqsubset (freqmap ls) m) $ allWordsLetterCounts2
+
+allWordsWithLengths :: [(String, Int)]
+allWordsWithLengths = map (\w -> (w, length w)) allWords
+
+maxWordLength :: Int
+maxWordLength = foldl (\m (_,l) -> max m l) 0 allWordsWithLengths
+
+allWordsLetterCounts3 :: [[(Map Char Integer, String)]]
+allWordsLetterCounts3 = [ map (\(w,_) -> (freqmap w, w)) $ filter ((==) i . snd) allWordsWithLengths | i <- [0..maxWordLength] ]
+
+-- TODO: complicated, but much faster
+possibleWords3 ls = concat [ possibleWords3In ls $ allWordsLetterCounts3 !! i | i <- [3..(min maxWordLength $ length ls)] ]
+
+possibleWords3In :: [Char] -> [(Map Char Integer, String)] -> [String]
+possibleWords3In ls possible = map snd $ filter (freqsubset (freqmap ls) . fst) possible
+
+
 -- Ex. 7:
 -- Given a set of letters, find the highest scoring word that can be formed from them.
 -- TODO: partial functions?
@@ -163,21 +179,81 @@ aiMove bag rack
         countVowels :: [Char] -> Int
         countVowels ls = length $ filter (`elem` "aeiou") ls
 
-instance Show Move where
-    show TakeConsonant = "c"
-    show TakeVowel     = "v"
-    show (PlayWord w)  = w
+
+bestSequence :: [Char] -> (Int, [String])
+bestSequence bag = bestSequence' (take 9 bag) (drop 9 bag)
+    where
+        bestSequence' :: [Char] -> [Char] -> (Int, [String])
+        bestSequence' rack bag = foldl max (0, []) [ applyPair ((+) $ scoreWord w, (:) w) $ bestSequence' ((rack \\ w) ++ (take (length w) bag)) (drop (length w) bag) | w <- possibleWords3 rack ]
 
 
-alp = "qwertyuiopasdfghjklzxcvbnmkhdkjfhjiarheigflhuerighzfkjghdklfhuihmnbmnbnbzbx.bciQJHSDFKJSHdlfksdf''sdlkf"
+alp :: [Char]
+alp = "abcdefghijklmnopqrstuvxyz"
+
+isVowel :: Char -> Bool
+isVowel l = elem l "aeiou"
+
+vs :: [Char]
+vs = filter isVowel alp
+
+cs :: [Char]
+cs = filter (not . isVowel) alp
+
+vdist :: Map Char Rational
+vdist = fromList $ bagDistribution vs
+
+cdist :: Map Char Rational
+cdist = fromList $ bagDistribution cs
+
+bestWordFrom :: [String] -> (Int,String)
+bestWordFrom ws = foldr max (0,"") $ map ( \w -> (scoreWord w,w) ) ws
+
+avgScore :: [Char] -> [Char] -> Map Char Rational -> Rational
+avgScore rack ls ldist
+    = foldr ( \(l,(s,_)) acc -> (toRational s) * (ldist ! l) + acc ) 0
+        $ map ( \(l,ws) -> (l,bestWordFrom ws) )
+        $ foldr ( \l -> (:) (l,(possibleWords $ (l : rack))) ) [] ls
+
+possibleWordsIncluding :: Char -> [Char] -> [String]
+possibleWordsIncluding il [] = []
+possibleWordsIncluding il ls = possibleWords3In ls $ map ( \(m,w) -> (freqsubtract il 1 m,w) ) $ filter ((member il) . fst) $ concat $ take (length ls + 1) allWordsLetterCounts3
+
+sd :: [[(Integer,(Map Char Integer, String))]]
+sd = map ( sortBy ( \a b -> compare b a ) . map ( \(m,w) -> (toInteger $ scoreWord w,(m,w)) ) ) allWordsLetterCounts3
+
+
+avgScore2 :: [Char] -> [Char] -> Map Char Rational -> Rational
+avgScore2 rack ls ldist
+    = foldr ( \l acc ->
+        acc
+        + (ldist ! l)
+        * (toRational
+            $ fst
+--            $ trace2 l
+            $ foldr
+                ( \list acc ->
+                        max acc -- (trace2 l acc)
+                            $ coalesceMaybe
+                                (find
+                                    ( \(s,(m,w)) -> fst acc > s || (freqsubset (freqmap (l : rack)) m && member l m) )
+                                    list
+                                )
+                                (0,(fromList [],""))
+                )
+                (0,(fromList [],""))
+                $ take (length rack + 1) sd
+           )
+        ) 0 ls
+
+trace2 l x = trace (show l ++ "\t\t" ++ show x) x
+
 main :: IO()
 main = defaultMain
     [ bgroup "test"
-        [ bench "bestWord"      $ nf bestWord alp
-        , bench "possibleWords" $ nf possibleWords alp
-        , bench "filter"        $ nf (filter ((<= (length alp)) . length)) allWords
-        , bench "null"          $ nf (filter (null)) allWords
-        , bench "=="            $ nf (filter (== "")) allWords
+        [ bench "1.1" $ nf (avgScore "aestr" cs) cdist
+        , bench "1.2" $ nf (avgScore "aestr" vs) vdist
+        , bench "2.1" $ nf (avgScore2 "aestr" cs) cdist
+        , bench "1.2" $ nf (avgScore2 "aestr" vs) vdist
         ]
     ]
 

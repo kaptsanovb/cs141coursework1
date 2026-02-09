@@ -57,10 +57,14 @@ main = do
 --------------------------------------------------------------------------------
 -- RUNNING THE AI DIRECTLY
 
-getAverageDirect :: Int -> IO Rational
+getAverageDirect :: Int -> IO (Rational,Rational)
 getAverageDirect n = do
   results <- replicateM n runAIDirectly
-  pure $ fromIntegral (sum results) % fromIntegral n
+  let
+    e_x = (toInteger $ sum results) % (fromIntegral n)
+    e_x2 = (toInteger $ sum $ map (^ 2) results) % (fromIntegral n)
+
+  pure $ (e_x2 - (e_x)^2,e_x)
 
 -- Run the AI directly, without the TUI, and print the average score
 runTotal :: IO ()
@@ -71,12 +75,15 @@ runTotal = do
   let n = fromMaybe 1 $ asum (map readMaybe args)
   putStrLn $ "Running " <> show n <> " games, please wait..."
 
-  avg <- getAverageDirect n
+  (var,avg) <- getAverageDirect n
   let -- Print a ratio nicely as a multiple of 100
       avgStr :: String
       avgStr = printf "%.2f" (fromRational avg :: Double)
 
-  putStrLn $ "Average score after " <> show n <> " games: " <> avgStr
+      stddevStr :: String
+      stddevStr = printf "%.2f" (sqrt (fromRational var :: Double))
+
+  putStrLn $ "Stats after " <> show n <> " games:" <> "\nAvg: " <> avgStr <> "\nStddev: " <> stddevStr
 
 --------------------------------------------------------------------------------
 -- RUNNING THE TUI
